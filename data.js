@@ -3,6 +3,8 @@ const SITE = {
   name: "Щодня",
   tagline: "Новини, гроші, авто і технології",
   url: "https://shodnya.in.ua",
+    ga: "G-TD6T6KRLQR",
+
 }; // url: адреса вашого сайту без слеша в кінці
 const RUBRICS = {
   news: "Новини",

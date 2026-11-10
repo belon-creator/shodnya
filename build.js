@@ -28,19 +28,28 @@ const sidebar = r => `<aside><section><h3>Популярне</h3><ol>${[...list]
 
 const STRIP = `<div class="strip"><div class="wrap"><button class="chip" id="wx" type="button" title="Натисніть, щоб визначити ваше місто">Погода…</button><span class="chip" id="usd"></span><span class="chip" id="eur"></span></div></div>`;
 
+const GTM = (SITE.gtm || '').trim(); // ID контейнера задається лише в data.js: SITE.gtm = 'GTM-XXXX'; порожньо — тег не додається
+const gtmHead = GTM ? `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM}');</script>` : '';
+const gtmBody = GTM ? `<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${GTM}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>` : '';
+// Google Analytics 4 напряму (без GTM): SITE.ga = 'G-XXXXXXXXXX'
+const GA = (SITE.ga || '').trim();
+const gaHead = GA ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${GA}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA}');</script>` : '';
+if (GA && GTM) console.warn('УВАГА: задано і SITE.ga, і SITE.gtm. Якщо GA4 також підключено всередині GTM, перегляди рахуватимуться двічі: залиште щось одне.');
+
 function page({ title, desc, file, r = '', cur = '', main, type = 'website', ld = '', home = false }) {
-  const nav = [['Стрічка', `${r}index.html`, 'home'], ...Object.entries(RUBRICS).map(([k, v]) => [v, `${r}${k}/`, k]), ['Архів', `${r}archive.html`, 'archive']]
+  const nav = [['Стрічка', r || './', 'home'], ...Object.entries(RUBRICS).map(([k, v]) => [v, `${r}${k}/`, k]), ['Архів', `${r}archive.html`, 'archive']]
     .map(([t, h, k]) => `<a href="${h}"${k === cur ? ' class="on"' : ''}>${t}</a>`).join('');
   out(file, `<!doctype html>
-<html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${gtmHead}${gaHead}
 <title>${esc(title)}</title><meta name="description" content="${esc(desc)}">
-${BASE ? `<link rel="canonical" href="${BASE}/${file === 'index.html' ? '' : file}">` : ''}
+${BASE ? `<link rel="canonical" href="${BASE}/${file.replace(/index\.html$/, '')}">` : ''}
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}"><meta property="og:type" content="${type}"><meta property="og:locale" content="uk_UA">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&family=Source+Serif+4:wght@600;700;800&display=swap&subset=cyrillic" rel="stylesheet">
 <link rel="icon" href="${r}favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="${r}style.css">${ld}</head><body>
-<header><div class="wrap"><a class="logo" href="${r}index.html">${esc(SITE.name)}<i></i></a><nav aria-label="Рубрики">${nav}</nav></div></header>${home ? STRIP : ''}
+<link rel="stylesheet" href="${r}style.css">${ld}</head><body>${gtmBody}
+<header><div class="wrap"><a class="logo" href="${r || './'}">${esc(SITE.name)}<i></i></a><nav aria-label="Рубрики">${nav}</nav></div></header>${home ? STRIP : ''}
 <main class="wrap"><div>${main}</div>${sidebar(r)}</main>
 <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(SITE.name)}. ${esc(SITE.tagline)}.</div></footer>${home ? '<script src="widgets.js"></script>' : ''}</body></html>`);
 }
@@ -71,7 +80,7 @@ for (const a of list) {
   });
   const ld = `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Article', headline: a.title, description: a.lead, datePublished: a.date, inLanguage: 'uk', mainEntityOfPage: BASE ? `${BASE}/${a.url}` : undefined, publisher: { '@type': 'Organization', name: SITE.name } }).replace(/</g, '\\u003c')}</script>`;
   page({ title: `${a.title} — ${SITE.name}`, desc: a.lead, file: a.url, r: '../', cur: a.rubric, type: 'article', ld,
-    main: `<article class="full ${a.rubric}"><div class="crumbs"><a href="../index.html">Стрічка</a> / <a href="../${a.rubric}/">${RUBRICS[a.rubric]}</a></div>
+    main: `<article class="full ${a.rubric}"><div class="crumbs"><a href="../">Стрічка</a> / <a href="../${a.rubric}/">${RUBRICS[a.rubric]}</a></div>
 <h1>${esc(a.title)}</h1><div class="meta"><time datetime="${a.date}">${dFull(a.date)}</time></div>
 <p class="lead">${esc(a.lead)}</p>
 ${bodyL}</article>${rel.length ? `<h1 style="margin-top:40px">Читайте також</h1>${rel.map(x => item(x, '../')).join('')}` : ''}` });
@@ -80,5 +89,9 @@ ${bodyL}</article>${rel.length ? `<h1 style="margin-top:40px">Читайте т�
 const urls = ['', 'archive.html', ...Object.keys(RUBRICS).map(k => `${k}/`), ...list.map(a => a.url)];
 out('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => { const a = list.find(x => x.url === u); return `<url><loc>${BASE}/${u}</loc>${a ? `<lastmod>${a.date}</lastmod>` : ''}</url>`; }).join('\n')}\n</urlset>\n`);
 out('robots.txt', `User-agent: *\nAllow: /\n${BASE ? `Sitemap: ${BASE}/sitemap.xml\n` : ''}`);
+out('.htaccess', `RewriteEngine On
+RewriteCond %{THE_REQUEST} \\s/(.*/)?index\\.html[\\s?] [NC]
+RewriteRule ^(.*/)?index\\.html$ /$1 [R=301,L]
+`);
 console.log(`Готово: ${list.length} статей у папці dist/`);
 if (!BASE || BASE.includes('your-domain')) console.warn('УВАГА: вкажіть справжню адресу сайту в SITE.url у data.js і запустіть build.js ще раз.');
