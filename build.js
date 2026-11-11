@@ -37,7 +37,7 @@ const gaHead = GA ? `<script async src="https://www.googletagmanager.com/gtag/js
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA}');</script>` : '';
 if (GA && GTM) console.warn('УВАГА: задано і SITE.ga, і SITE.gtm. Якщо GA4 також підключено всередині GTM, перегляди рахуватимуться двічі: залиште щось одне.');
 
-function page({ title, desc, file, r = '', cur = '', main, type = 'website', ld = '', home = false }) {
+function page({ title, desc, file, r = '', cur = '', main, type = 'website', ld = '', home = false, scripts = '' }) {
   const nav = [['Стрічка', r || './', 'home'], ...Object.entries(RUBRICS).map(([k, v]) => [v, `${r}${k}/`, k]), ['Архів', `${r}archive.html`, 'archive']]
     .map(([t, h, k]) => `<a href="${h}"${k === cur ? ' class="on"' : ''}>${t}</a>`).join('');
   out(file, `<!doctype html>
@@ -49,9 +49,9 @@ ${BASE ? `<link rel="canonical" href="${BASE}/${file.replace(/index\.html$/, '')
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&family=Source+Serif+4:wght@600;700;800&display=swap&subset=cyrillic" rel="stylesheet">
 <link rel="icon" href="${r}favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${r}style.css">${ld}</head><body>${gtmBody}
-<header><div class="wrap"><a class="logo" href="${r || './'}">${esc(SITE.name)}<i></i></a><nav aria-label="Рубрики">${nav}</nav></div></header>${home ? STRIP : ''}
+<header><div class="wrap"><a class="logo" href="${r || './'}">${esc(SITE.name)}<i></i></a><nav aria-label="Рубрики">${nav}</nav><form class="search" action="${r}search.html" role="search"><input name="q" type="search" placeholder="Пошук" aria-label="Пошук по сайту"></form></div></header>${home ? STRIP : ''}
 <main class="wrap"><div>${main}</div>${sidebar(r)}</main>
-<footer><div class="wrap">© ${new Date().getFullYear()} ${esc(SITE.name)}. ${esc(SITE.tagline)}.</div></footer>${home ? '<script src="widgets.js"></script>' : ''}</body></html>`);
+<footer><div class="wrap">© ${new Date().getFullYear()} ${esc(SITE.name)}. ${esc(SITE.tagline)}.</div></footer>${home ? '<script src="widgets.js"></script>' : ''}${scripts}</body></html>`);
 }
 
 fs.rmSync('dist', { recursive: true, force: true });
@@ -69,6 +69,7 @@ for (const [k, v] of Object.entries(RUBRICS)) {
   page({ title: `${v} — ${SITE.name}`, desc: `${v}: усі матеріали рубрики на ${SITE.name}.`, file: `${k}/index.html`, r: '../', cur: k, main: `<h1>${v}</h1>${rows.length ? stream(rows, '../') : '<p class="empty">У цій рубриці поки немає матеріалів.</p>'}` });
 }
 
+const searchIdx = [];
 for (const a of list) {
   const body = typeof a.body === 'string' ? a.body : a.body.map(p => p.trim().startsWith('<') ? p : p.startsWith('```') ? `<pre><code>${esc(p.replace(/^```\w*\n?|\n?```$/g, ''))}</code></pre>` : p.startsWith('## ') ? `<h2>${esc(p.slice(3))}</h2>` : `<p>${esc(p)}</p>`).join('\n');
   const rel = list.filter(x => x.rubric === a.rubric && x.id !== a.id).slice(0, 3);
@@ -78,6 +79,8 @@ for (const a of list) {
     if (hits.length !== 1) { console.warn(`УВАГА: у статті «${a.title}» посилання [[${key}]] ${hits.length ? 'підходить до кількох статей' : 'не знайдено'}`); return text || key; }
     return `<a href="../${hits[0].url}">${text || hits[0].title}</a>`;
   });
+  searchIdx.push({ t: a.title, l: a.lead, u: a.url, k: a.rubric, n: RUBRICS[a.rubric], d: dFull(a.date),
+    x: bodyL.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase().slice(0, 4000) });
   const ld = `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Article', headline: a.title, description: a.lead, datePublished: a.date, inLanguage: 'uk', mainEntityOfPage: BASE ? `${BASE}/${a.url}` : undefined, publisher: { '@type': 'Organization', name: SITE.name } }).replace(/</g, '\\u003c')}</script>`;
   page({ title: `${a.title} — ${SITE.name}`, desc: a.lead, file: a.url, r: '../', cur: a.rubric, type: 'article', ld,
     main: `<article class="full ${a.rubric}"><div class="crumbs"><a href="../">Стрічка</a> / <a href="../${a.rubric}/">${RUBRICS[a.rubric]}</a></div>
@@ -86,6 +89,12 @@ for (const a of list) {
 ${bodyL}</article>${rel.length ? `<h1 style="margin-top:40px">Читайте також</h1>${rel.map(x => item(x, '../')).join('')}` : ''}` });
 }
 
+fs.writeFileSync('dist/search-index.js', 'window.SEARCH=' + JSON.stringify(searchIdx) + ';');
+fs.copyFileSync('search.src.js', 'dist/search.js');
+page({ title: `Пошук — ${SITE.name}`, desc: `Пошук по сайту ${SITE.name}.`, file: 'search.html',
+  ld: '<meta name="robots" content="noindex,follow">',
+  main: '<h1 id="sq">Пошук по сайту</h1><div id="results"></div>',
+  scripts: '<script src="search-index.js"></script><script src="search.js"></script>' });
 const urls = ['', 'archive.html', ...Object.keys(RUBRICS).map(k => `${k}/`), ...list.map(a => a.url)];
 out('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => { const a = list.find(x => x.url === u); return `<url><loc>${BASE}/${u}</loc>${a ? `<lastmod>${a.date}</lastmod>` : ''}</url>`; }).join('\n')}\n</urlset>\n`);
 out('robots.txt', `User-agent: *\nAllow: /\n${BASE ? `Sitemap: ${BASE}/sitemap.xml\n` : ''}`);
